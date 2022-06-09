@@ -1,0 +1,21 @@
+[Defines]
+    INF_VERSION = 0x00010006
+    BASE_NAME = Boot
+    FILE_GUID = c6c19c95-89df-42f7-a36b-41a96c70eeb0
+    MODULE_TYPE = UEFI_APPLICATION
+    VERSION_STRING = 0.1
+    ENTRY_POINT = UefiMain
+
+[Sources]
+    Boot.c
+    File.c
+
+[Packages]
+    MdePkg/MdePkg.dec
+
+[LibraryClasses]
+    UefiApplicationEntryPoint
+    UefiLib
+
+[Guids]
+    gEfiFileInfoGuid
