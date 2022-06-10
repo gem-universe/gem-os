@@ -1,0 +1,1 @@
+gcc ./kernel/Kernel.c -nostdlib -ffreestanding -o ./build/Kernel.elf
