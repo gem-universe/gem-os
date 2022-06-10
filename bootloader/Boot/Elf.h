@@ -1,3 +1,6 @@
+#ifndef _GEM_BOOTLOADER_ELF_
+#define _GEM_BOOTLOADER_ELF_
+
 #include <Uefi.h>
 
 #define ELFMAG "\177ELF" /* Magic Number 0x7F E L F */
@@ -59,3 +62,5 @@ RelocateElf(
     IN CHAR16 *FileName,
     OUT EFI_PHYSICAL_ADDRESS *RelocateAddr
 );
+
+#endif
