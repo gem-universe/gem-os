@@ -1,17 +1,20 @@
-// #include <Library/UefiBootServicesTableLib.h>
+#include <Guid/FileInfo.h>
+#include <Library/UefiBootServicesTableLib.h>
+#include <Library/UefiLib.h>
 
 #include "File.h"
 #include "Setup.h"
 
-#ifdef DEBUG
-#include "Debug.h"
+#ifdef GEM_LOG
+#include "Log.h"
 #endif
 
 EFI_STATUS
 EFIAPI
 LoadFile(
     IN CHAR16 *FileName,
-    OUT EFI_PHYSICAL_ADDRESS *FileAddr)
+    OUT EFI_PHYSICAL_ADDRESS *FileBufferAddr,
+    OUT UINTN *FilePages)
 {
     EFI_STATUS StatusCode = EFI_SUCCESS;
     UINTN NoHandles = 0;
@@ -28,14 +31,14 @@ LoadFile(
     // 当Buffer中的内容不再需要时，应该调用BootService.FreePool()
     if (EFI_ERROR(StatusCode))
     {
-#ifdef DEBUG
-        DebugStatusFormat(StatusCode, L"LoadFile", L"Failed to locate handle buffer of simple file system protocol");
+#ifdef GEM_LOG
+        LogStatusCode(StatusCode, L"LoadFile", L"Failed to locate handle buffer of simple file system protocol");
 #endif
         return StatusCode;
     }
-#ifdef DEBUG
-    DebugStatusFormat(StatusCode, L"LoadFile", L"Locate handle buffer success");
-    Print(L"NoHandles: %n\n", NoHandles);
+#ifdef GEM_LOG
+    LogStatusCode(StatusCode, L"LoadFile", L"Locate handle buffer success");
+    Print(L"NoHandles: %d\n", NoHandles);
 #endif
 
     // 直接打开第一个Handle的Protocol
@@ -46,13 +49,13 @@ LoadFile(
         (VOID **)&FileSystem);
     if (EFI_ERROR(StatusCode))
     {
-#ifdef DEBUG
-        DebugStatusFormat(StatusCode, L"LoadFile", L"Failed to handle protocol of simple file system handle");
+#ifdef GEM_LOG
+        LogStatusCode(StatusCode, L"LoadFile", L"Failed to handle protocol of simple file system handle");
 #endif
         return StatusCode;
     }
-#ifdef DEBUG
-    DebugStatusFormat(StatusCode, L"LoadFile", L"Handle protocol success");
+#ifdef GEM_LOG
+    LogStatusCode(StatusCode, L"LoadFile", L"Handle protocol success");
 #endif
 
     EFI_FILE_PROTOCOL *Root;
@@ -61,13 +64,13 @@ LoadFile(
         &Root);
     if (EFI_ERROR(StatusCode))
     {
-#ifdef DEBUG
-        DebugStatusFormat(StatusCode, L"LoadFile", L"Failed to open volume");
+#ifdef GEM_LOG
+        LogStatusCode(StatusCode, L"LoadFile", L"Failed to open volume");
 #endif
         return StatusCode;
     }
-#ifdef DEBUG
-    DebugStatusFormat(StatusCode, L"LoadFile", L"Open volume success");
+#ifdef GEM_LOG
+    LogStatusCode(StatusCode, L"LoadFile", L"Open volume success");
 #endif
 
     EFI_FILE_PROTOCOL *File;
@@ -79,101 +82,111 @@ LoadFile(
         0);
     if (EFI_ERROR(StatusCode))
     {
-#ifdef DEBUG
-        DebugStatusFormat(StatusCode, L"LoadFile", L"Failed to open file");
+#ifdef GEM_LOG
+        LogStatusCode(StatusCode, L"LoadFile", L"Failed to open file");
 #endif
         return StatusCode;
     }
-#ifdef DEBUG
-    DebugStatusFormat(StatusCode, L"LoadFile", L"Open file success");
+#ifdef GEM_LOG
+    LogStatusCode(StatusCode, L"LoadFile", L"Open file success");
     Print(L"FileName: %s\n", FileName);
 #endif
-    
-    UINTN FileInfoSize = sizeof(EFI_FILE_INFO) + sizeof(CHAR16) * StrLen(FileName) + 2;
-}
 
-EFI_STATUS
-EFIAPI
-GetFileHandle(
-    IN EFI_HANDLE ImageHandle,
-    IN CHAR16 *FileName,
-    OUT EFI_FILE_PROTOCOL **FileHandle)
-{
-    EFI_STATUS Status = EFI_SUCCESS;
-    UINTN NoHandles = 0;
-    EFI_HANDLE *HandleBuffer;
-    Status = gBS->LocateHandleBuffer(
-        ByProtocol,
-        &gEfiSimpleFileSystemProtocolGuid,
-        NULL,
-        &NoHandles,
-        &HandleBuffer);
-
-    EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *FileSystem;
-    Status = gBS->OpenProtocol(
-        HandleBuffer[0],
-        &gEfiSimpleFileSystemProtocolGuid,
-        (VOID **)&FileSystem,
-        ImageHandle,
-        NULL,
-        EFI_OPEN_PROTOCOL_GET_PROTOCOL);
-
-    EFI_FILE_PROTOCOL *Root;
-    Status = FileSystem->OpenVolume(
-        FileSystem,
-        &Root);
-
-    Status = Root->Open(
-        Root,
-        FileHandle,
-        FileName, // L"\\Logo.bmp"
-        EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE,
-        EFI_OPEN_PROTOCOL_GET_PROTOCOL);
-
-    return Status;
-}
-
-EFI_STATUS
-EFIAPI
-ReadFile(
-    IN EFI_FILE_PROTOCOL *File,
-    OUT EFI_PHYSICAL_ADDRESS *FileBase)
-{
-    EFI_STATUS Status = EFI_SUCCESS;
+    // FileInfoSize实际大小会比此处计算的小，因为EFI_FILE_INFO结构体给FileName留了一个成员位置，结构体内存对齐导致占用变大。
+    // 64为系统按8字节对齐的话，就会大8字节。
+    UINTN FileInfoSize = sizeof(EFI_FILE_INFO) + sizeof(CHAR16) * StrLen(FileName);
     EFI_FILE_INFO *FileInfo;
-
-    UINTN InfoSize = sizeof(EFI_FILE_INFO) + 128;
-    // 开辟内存空间为FileInfo结构体大小加上CHAR16格式文件名长度
-    // 这里原作者偷懒没计算长度，直接加了128
-    Status = gBS->AllocatePool(
+    StatusCode = gBS->AllocatePool(
         EfiLoaderData,
-        InfoSize,
+        FileInfoSize,
         (VOID **)&FileInfo);
+    if (EFI_ERROR(StatusCode))
+    {
+#ifdef GEM_LOG
+        LogStatusCode(StatusCode, L"LoadFile", L"Failed to allocate pool");
+#endif
+        return StatusCode;
+    }
+#ifdef GEM_LOG
+    LogStatusCode(StatusCode, L"LoadFile", L"Allocate pool success");
+    Print(L"Sizeof(EFI_FILE_INFO): %d, Sizeof(CHAR16): %d, StrLen(FileName): %d\n", sizeof(EFI_FILE_INFO), sizeof(CHAR16), StrLen(FileName));
+    Print(L"MyFileInfoSize: %d\n", FileInfoSize);
+#endif
 
-    Status = File->GetInfo(
+    // 获取FileInfo，此时FileInfoSize会被修改为真正的FileInfo大小。
+    StatusCode = File->GetInfo(
         File,
         &gEfiFileInfoGuid,
-        &InfoSize,
+        &FileInfoSize,
         FileInfo);
+    if (EFI_ERROR(StatusCode))
+    {
+#ifdef GEM_LOG
+        LogStatusCode(StatusCode, L"LoadFile", L"Failed to get file info");
+#endif
+        return StatusCode;
+    }
+#ifdef GEM_LOG
+    LogStatusCode(StatusCode, L"LoadFile", L"Get file info success");
+    Print(L"TrueFileInfoSize: %d\n", FileInfo->Size);
+#endif
 
-    UINTN FilePageSize = (FileInfo->FileSize >> 12) + 1;
-    // 这里加1是因为，每页4K,文件不一定是4K的整数倍
-    // 可以再斟酌是否需要加一
-
-    EFI_PHYSICAL_ADDRESS FileBufferAddress;
-    Status = gBS->AllocatePages(
+    // 在内存中开辟空间，作为文件的Buffer
+    *FilePages = (FileInfo->FileSize + 4095) / 4096;
+    StatusCode = gBS->AllocatePages(
         AllocateAnyPages,
         EfiLoaderData,
-        FilePageSize,
-        &FileBufferAddress);
+        *FilePages,
+        FileBufferAddr);
+    if (EFI_ERROR(StatusCode))
+    {
+#ifdef GEM_LOG
+        LogStatusCode(StatusCode, L"LoadFile", L"Failed to allocate pages");
+#endif
+        return StatusCode;
+    }
+#ifdef GEM_LOG
+    LogStatusCode(StatusCode, L"LoadFile", L"Allocate pages success");
+#endif
 
-    UINTN ReadSize = FileInfo->FileSize;
-    Status = File->Read(
+    // 将文件读取到Buffer
+    StatusCode = File->Read(
         File,
-        &ReadSize,
-        (VOID *)FileBufferAddress);
+        &FileInfo->FileSize,
+        (VOID *)*FileBufferAddr);
+    if (EFI_ERROR(StatusCode))
+    {
+#ifdef GEM_LOG
+        LogStatusCode(StatusCode, L"LoadFile", L"Failed to read file");
+#endif
+        return StatusCode;
+    }
+#ifdef GEM_LOG
+    LogStatusCode(StatusCode, L"LoadFile", L"Read file success");
+#endif
 
-    gBS->FreePool(FileInfo);
-    *FileBase = FileBufferAddress;
-    return Status;
+    // 释放不需要的空间
+    StatusCode = gBS->FreePool(HandleBuffer);
+    if (EFI_ERROR(StatusCode))
+    {
+#ifdef GEM_LOG
+        LogStatusCode(StatusCode, L"LoadFile", L"Free pool of SFSP handle buffer failed");
+#endif
+        return StatusCode;
+    }
+#ifdef GEM_LOG
+    LogStatusCode(StatusCode, L"LoadFile", L"Free pool of SFSP handle buffer success");
+#endif
+    StatusCode = gBS->FreePool(FileInfo);
+    if (EFI_ERROR(StatusCode))
+    {
+#ifdef GEM_LOG
+        LogStatusCode(StatusCode, L"LoadFile", L"Free pool of file info failed");
+#endif
+        return StatusCode;
+    }
+#ifdef GEM_LOG
+    LogStatusCode(StatusCode, L"LoadFile", L"Free pool of file info success");
+#endif
+    return StatusCode;
 }

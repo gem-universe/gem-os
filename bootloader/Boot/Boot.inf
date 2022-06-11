@@ -8,6 +8,8 @@
 
 [Sources]
     Boot.c
+    Log.c
+    Elf.c
     File.c
 
 [Packages]

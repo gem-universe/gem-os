@@ -3,13 +3,20 @@
 
 #include <Uefi.h>
 
-#define ELFMAG "\177ELF" /* Magic Number 0x7F E L F */
-#define ELFCLASS32 1
-#define ELFCLASS64 2
+#define ELF_MAG0 0x7f
+#define ELF_MAG1 'E'
+#define ELF_MAG2 'L'
+#define ELF_MAG3 'F'
+#define ELFMAG "\177ELF" /* 魔数 0x7F E L F */
+#define ELFCLASS32 1     /* 32位 */
+#define ELFCLASS64 2     /* 64位 */
+#define ELFDATALE 1      /* 小端序 */
+#define ELFDATABE 2      /* 大端序 */
 
+#pragma pack(1)
 typedef struct
 {
-    UINT8 Magic[4];   // ELF魔术: 7F454C46
+    UINT8 Magic[4];   // ELF魔数: 7F454C46
     UINT8 Class;      // 文件版本。32位为1，64位为2
     UINT8 Data;       // 文件字节序。小端为1，大端为2
     UINT8 Version;    // ELF版本
@@ -18,10 +25,10 @@ typedef struct
     UINT8 Pad[7];     // 保留位
 } ELF_EIDENT;
 
-/* ELF Header */
+/* ELF头部（Header） */
 typedef struct
 {
-    ELF_EIDENT Ident;  // ELF标识符
+    ELF_EIDENT Ident; // ELF标识符
     UINT16 Type;      // 目标文件类型：可重定位文件、可执行文件、动态链接类型...
     UINT16 Machine;   // 指令集架构
     UINT32 Version;   // ELF版本
@@ -36,8 +43,16 @@ typedef struct
     UINT16 ShNum;     // 节头入口数量
     UINT16 ShStrNdx;  // 节入口索引，包含节头表里节的名字
 } ELF64_EHDR;
+#pragma pack()
 
-/* Program Header */
+#define PT_NULL 0
+#define PT_LOAD 1
+#define PT_DYNAMIC 2
+#define PT_INTERP 3
+#define PT_PHDR 6
+
+#pragma pack(1)
+/* 程序头（Program Header） */
 typedef struct
 {
     UINT32 Type;   // 段（Segment）类型：PHDR，LOAD，DYNAMIC...
@@ -49,18 +64,23 @@ typedef struct
     UINT64 MemSz;  // 本段在内存中的大小，可能与FileSize不同
     UINT64 Align;  // 对齐
 } ELF64_PHDR;
+#pragma pack()
 
+/** 检查ELF文件格式。
+ * 内部检查了ELF魔数、32/64位和大小端。 */
 EFI_STATUS
 EFIAPI
-CheckElf64(
-    IN EFI_PHYSICAL_ADDRESS PAddr
-);
+CheckElf(
+    IN EFI_PHYSICAL_ADDRESS ElfBufferAddr,
+    IN UINTN ElfClass,
+    IN UINTN ElfData);
 
+/** 将ELF文件进行重定位。
+ * @return 返回重定位后的程序入口。 */
 EFI_STATUS
 EFIAPI
 RelocateElf(
     IN CHAR16 *FileName,
-    OUT EFI_PHYSICAL_ADDRESS *RelocateAddr
-);
+    OUT EFI_PHYSICAL_ADDRESS *RelocateEntryPointAddr);
 
 #endif

@@ -2,22 +2,38 @@
 #include <Library/UefiLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 
+#include "Elf.h"
 #include "File.h"
+#include "Setup.h"
 
-EFI_STATUS // 函数返回值为函数运行的状态
-EFIAPI // 只是一个标识，表示符合EFI规范
+#ifdef GEM_LOG
+#include "Log.h"
+#endif
+
+EFI_STATUS
+EFIAPI
 UefiMain(
-    IN EFI_HANDLE ImageHandle, // 内存镜像句柄
+    IN EFI_HANDLE ImageHandle,       // 内存镜像句柄
     IN EFI_SYSTEM_TABLE *SystemTable // 系统表
 )
 {
-    EFI_STATUS Status = EFI_SUCCESS;
-    EFI_FILE_PROTOCOL *Bin;
-    Status = GetFileHandle(ImageHandle, L"\\Kernel.bin", &Bin);
-    EFI_PHYSICAL_ADDRESS BinAddress;
-    Status = ReadFile(Bin, &BinAddress);
-    
-    asm("jmp %0": : "m"(BinAddress));
+    EFI_STATUS StatusCode = EFI_SUCCESS;
 
-    return Status;
+    // 重定位Kernel.elf，获得内核入口
+    EFI_PHYSICAL_ADDRESS KernelEntryPoint;
+    StatusCode = RelocateElf(L"\\Kernel.elf", &KernelEntryPoint);
+#ifdef GEM_LOG
+    if (EFI_ERROR(StatusCode))
+    {
+        LogStatusCode(StatusCode, L"UefiMain", L"Relocate kernel entry point failed");
+        return StatusCode;
+    }
+    LogStatusCode(StatusCode, L"UefiMain", L"Relocate kernel entry point success");
+#endif
+    int (*KernelEntry)();
+    KernelEntry = (int (*)())KernelEntryPoint;
+    int Value = KernelEntry();
+    Print(L"Return value from Kernel = %d\n", Value);
+
+    return StatusCode;
 }

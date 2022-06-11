@@ -57,16 +57,8 @@ TOOL_CHAIN_TAG = GCC5
 
 ## QEMU安装
 
-Debian:
-
 ```bash
 sudo apt install qemu qemu-system-x86
-```
-
-Ubuntu:
-
-```bash
-sudo apt install qemu qemu-system-x86_64
 ```
 
 ## 编译UEFI固件
