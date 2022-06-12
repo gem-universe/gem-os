@@ -1,10 +1,10 @@
+#include "Elf.h"
+#include "File.h"
+#include "Setup.h"
 #include <Uefi.h>
 #include <Library/UefiLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 
-#include "Elf.h"
-#include "File.h"
-#include "Setup.h"
 
 #ifdef GEM_LOG
 #include "Log.h"

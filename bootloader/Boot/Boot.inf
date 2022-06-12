@@ -8,9 +8,9 @@
 
 [Sources]
     Boot.c
-    Log.c
     Elf.c
     File.c
+    Log.c
 
 [Packages]
     MdePkg/MdePkg.dec
